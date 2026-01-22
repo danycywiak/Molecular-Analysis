@@ -1,0 +1,176 @@
+#  ======================================================================
+#       This program reads the file "OriginalRepaired.txt"  which contains
+#               the position of 500 molecules.
+#   Button1_Click(), calculates g(r), the Radial Distribution Function in 3D.
+#   Button2_Click() takes the data of the atoms save them as required to
+#   be plotted with Ovito
+#  ======================================================================
+
+import numpy as np
+from tkinter import filedialog as fd
+import matplotlib.pyplot as plt
+import tkinter
+Pi=np.pi;
+LX=5.124; LY=5.124; LZ=7.883; # Dimensions of simulation box
+LT=np.sqrt(LX*LX +LY*LY +LZ*LZ);
+NumberOfBins=60;     # Toatal number of bins to store distances
+# TotalMolecules=5; TotalRows=500*38;
+
+g=np.zeros(NumberOfBins); s=np.zeros(NumberOfBins)
+
+# ========================    tkinter section     ======================
+
+def Button1_Click():
+    global Directory, FileNameSource; 
+    Directory=fd.askdirectory();
+    Edit1.delete(0, 'end')
+    Edit1.insert(0, Directory);
+
+    
+
+def Button2_Click():
+    global TotalRows, TotalMolecules, S, S1;
+    StartNumber= int( Edit2.get() );
+    FinalNumber= int( Edit3.get() );
+    for Num in range(StartNumber, FinalNumber+1):
+        FileNameSource=Directory +"/" +"SnapShot" +str(Num) +".txt";
+        DataFile=open(FileNameSource, "r");
+        S=DataFile.read();
+        DataFile.close();
+        S1=S.split();
+        TotalRows=int( len(S1)/6 ); # Every row has 6 elements
+        TotalMolecules=int(TotalRows/38); # Each molecule has 38 (X,Y,Z) positions
+        CalculateAngles();
+        ConvertToOvito(Num);  
+
+Form1=tkinter.Tk();
+Form1.geometry("500x340+800+400");
+Form1.title("Form1");
+
+Edit1=tkinter.Entry(Form1);
+Edit1.place(x=40, y=20, width=300, height=32);
+
+Button1=tkinter.Button(Form1, text="Button1", command=Button1_Click);
+Button1.place(x=140, y=60, width=100, height=32);
+
+Button1=tkinter.Button(Form1, text="Start", command=Button2_Click);
+Button1.place(x=200, y=180, width=100, height=32);
+
+Label1=tkinter.Label(Form1,text="Select source file");
+Label1.place(x=144, y=100);
+
+Edit2=tkinter.Entry(Form1);
+Edit2.place(x=60, y=130, width=30, height=32);
+
+Edit3=tkinter.Entry(Form1);
+Edit3.place(x=116, y=130, width=30, height=32);
+
+Label2=tkinter.Label(Form1,text="Select  Start  and  Final  files");
+Label2.place(x=24, y=160);
+
+
+# =======================================================================
+
+def CalculateAngles():
+    global  r, Angle, MaxAngle, MinAngle;
+    r=np.zeros( (TotalRows,3) ); # Position vectors
+    Angle=np.zeros(TotalMolecules); 
+    # Calculating the position of each atom
+    for m in range(0, TotalRows ):
+        r[m]=[ float(S1[m*6+3]), float(S1[m*6+4]), float(S1[m*6+5]) ];
+
+    # Now we have all the positions. We proceed calculating their normal vectors
+    # First hexagon is positioned at: (2, 3, 4 ,5 , 6, 7) clockwise situated
+    # Second hexagon is positioned at (8, 9 10, 11, 12 , 13) counterclockwise situated
+    for Item in range(0, TotalMolecules):
+        r5_3=r[3 +38*Item]-r[5 +38*Item];       r5_7=r[7 +38*Item]-r[5 +38*Item];
+        r11_13=r[13 +38*Item]-r[11 +38*Item];   r11_9=r[9 +38*Item]-r[11 +38*Item];
+        T=r[2 +38*Item]-r[11 +38*Item]; T=T/np.sqrt(np.dot(T,T));
+        N1=np.cross(r5_3,r5_7);  N2=np.cross(r11_13,r11_9);
+        N1=N1/np.sqrt(np.dot(N1,N1)); N2=N2/np.sqrt(np.dot(N2,N2));
+    
+        #Argument=2.0*( np.dot( np.cross(N1,N2), T ) )*np.dot(N1,N2);
+        #Angle[Item]=0.5*np.arcsin(Argument);
+
+        x = np.dot(N1, N2)
+        y = np.dot(np.cross(N1, N2), T)   # = T·(N1×N2), signo
+        Angle[Item] = np.arctan2(y, x)    # (-pi, pi)
+
+        # (opcional pero recomendado) "fold" a (-pi/2, pi/2)
+        if (Angle[Item] > Pi/2):
+            Angle[Item] = Angle[Item] - Pi
+        if (Angle[Item] < -Pi/2):
+            Angle[Item] = Angle[Item] + Pi
+
+
+        # Angle[Item]=np.arccos( np.dot(N1,N2) ); # OLD formulation
+    
+        # V=np.cross(N1,N2); V=V/np.sqrt(np.dot(V,V)) # Old Formulation
+        # Sign= np.dot(V,T);
+        # Sign=Sign/np.abs(Sign);
+        # Angle[Item]=Sign*Angle[Item];
+        # All the angles must fall between -Pi/2 to Pi/2
+        # if(Angle[Item]>Pi/2):
+        #    Angle[Item]=Angle[Item]-Pi;
+        # if(Angle[Item]<-Pi/2):
+        #    Angle[Item]=Angle[Item] +Pi;
+        
+    # Calculting Angle maximum and minimum
+    MaxAngle=np.max(Angle); MinAngle=np.min(Angle);
+    print("Angle min/max (deg):", np.degrees(np.min(Angle)), np.degrees(np.max(Angle)))
+
+
+
+def ConvertToOvito(Num):
+    print("Sending data to file. Please wait a chirris minute");
+    MyFile=Directory+ "/" + "OvitoFile2_" +str(Num) +".txt"; 
+    DataFile=open(MyFile, "w");
+    SM=""; # Empty storage string
+    # ---       Header --------------------------------
+    SM=SM + \
+    str(TotalRows) +"\n"  +"#" +"\n";
+    DataFile.write(SM);
+    theta_max = 40.0 * Pi / 180.0
+
+    # ----------------------------------
+    for m in range (0, TotalRows):
+        mol = int(m/38)
+        theta_deg = np.degrees(Angle[mol])   # ángulo de la molécula (en grados)
+    
+        SM=S1[m*6].ljust(6) +S1[m*6 +1].rjust(4) + \
+            S1[m*6+3].center(10) +S1[m*6+4].center(8) +S1[m*6+5].center(8)+ f"{theta_deg:10.4f}"
+        if (0<= m%38 and m%38<=18):
+            SM= SM +"0.1 ".center(6);   # C radio =0.2
+        else:
+            SM=SM + "0.05 ".center(6);    # H radio=0.1
+
+        '''    
+        if (Angle[ int(m/38) ] >=0):
+            Red=( Angle[ int(m/38)]/MaxAngle +1 )/2; Green=0; Blue=1-Red;
+            Red=round(Red,2); Blue=round(Blue,2);
+            S_Right=str(Red) + " " +str(Green) +" " + str(Blue) +"\n";
+            SM=SM +S_Right;
+        if (Angle[ int(m/38) ] <0):
+            Blue=( Angle[ int(m/38) ]/MinAngle +1 )/2; Green=0; Red=1-Blue;
+            Red=round(Red,2); Blue=round(Blue,2);
+            S_Left=str(Red) + " " +str(Green) +" " + str(Blue) +"\n";
+            SM=SM +S_Left;
+        '''
+
+        theta = Angle[int(m/38)]
+        t = (theta/theta_max + 1.0)/2.0
+        t = max(0.0, min(1.0, t))       # clip a [0,1]
+
+        Red = round(t, 2)
+        Green = 0
+        Blue = round(1.0 - t, 2)
+
+        SM = SM + f"{Red} {Green} {Blue}\n"
+
+        
+        DataFile.write(SM);
+    DataFile.close();
+    print("File written");
+
+
+ 
