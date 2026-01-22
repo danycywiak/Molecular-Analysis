@@ -3,7 +3,7 @@ Molecular Analysis Vector Definition and Visualization of 5CB LCs
 
 ## OVITO visualization
 
-![OVITO molecules](figures/Visualization.gif)
+![OVITO molecules](figures/VIsualization.gif)
 
 
 # OVITO Export (Twist angle + colored molecules)
